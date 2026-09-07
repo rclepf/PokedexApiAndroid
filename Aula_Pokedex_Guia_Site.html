@@ -1,0 +1,1391 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Arquitetura e Consumo de APIs — Pokédex Android</title>
+    <link rel="icon" type="image/png" href="pokebola.png">
+    <style>
+        :root {
+            --ink: #14171C;
+            --ink-soft: #1F242C;
+            --ink-line: #2B313B;
+            --bg: #EEF1F5;
+            --surface: #FFFFFF;
+            --line: #E2E6EB;
+            --text: #1B1E23;
+            --text-muted: #5B6470;
+            --api-color: #E3350D;
+            --arch-color: #2F6FED;
+            --async-color: #0D9488;
+            --fix-color: #C97A0F;
+            --code-bg: #0F1115;
+            --code-text: #D6DEE7;
+            --code-comment: #7A9F6E;
+            --focus-ring: #2F6FED;
+            --font-mono: 'JetBrains Mono', 'Fira Code', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+            --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+            font-family: var(--font-sans);
+            line-height: 1.6;
+            margin: 0;
+            padding: 0;
+            background-color: var(--bg);
+            color: var(--text);
+        }
+
+        a:focus-visible, button:focus-visible, .step-nav-link:focus-visible {
+            outline: 3px solid var(--focus-ring);
+            outline-offset: 2px;
+        }
+
+        .kw-arch { color: var(--arch-color); font-weight: 700; }
+        .kw-net { color: var(--api-color); font-weight: 700; }
+        .kw-async { color: var(--async-color); font-weight: 700; }
+        strong { color: #000000; font-weight: 700; }
+        code {
+            font-family: var(--font-mono);
+            background: #E7EAEF;
+            padding: 1px 6px;
+            border-radius: 4px;
+            font-size: 0.88em;
+        }
+        pre code { background: none; padding: 0; border-radius: 0; font-size: inherit; color: inherit; }
+
+        /* ---------- HERO ---------- */
+        header { background: var(--ink); padding: 3rem 1.2rem 2.6rem; }
+
+        .editor-window {
+            max-width: 720px;
+            margin: 0 auto;
+            background: var(--ink-soft);
+            border-radius: 10px;
+            border: 1px solid var(--ink-line);
+            overflow: hidden;
+        }
+
+        .editor-titlebar {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 14px;
+            background: #101317;
+            border-bottom: 1px solid var(--ink-line);
+        }
+
+        .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+        .dot.d-api { background: var(--api-color); }
+        .dot.d-fix { background: var(--fix-color); }
+        .dot.d-async { background: var(--async-color); }
+
+        .editor-titlebar .filename { margin-left: 8px; font-family: var(--font-mono); font-size: 0.8rem; color: #7D8590; }
+        .editor-body { padding: 2.2rem 2rem 2.4rem; text-align: left; }
+        .editor-body .comment-line { font-family: var(--font-mono); font-size: 0.85rem; color: var(--code-comment); margin: 0 0 1rem 0; }
+
+        header h1 { margin: 0; font-size: 2.1rem; letter-spacing: -0.5px; font-weight: 700; color: #EDEFF2; transform: translateZ(0); }
+        header p.subtitle { font-size: 1.05rem; color: #AEB6C2; margin: 0.7rem 0 0 0; max-width: 56ch; }
+
+        .hero-images { display: flex; gap: 16px; margin-top: 1.6rem; }
+        .hero-img { height: 56px; object-fit: contain; opacity: 0.92; }
+
+        /* ---------- NAV ---------- */
+        nav { background: var(--ink); padding: 0.7rem 1rem; position: sticky; top: 0; border-bottom: 1px solid var(--ink-line); z-index: 100; }
+
+        .nav-inner {
+            max-width: 1100px;
+            margin: 0 auto;
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            flex-wrap: nowrap;
+            gap: 1rem;
+        }
+
+        .nav-brand { font-family: var(--font-mono); font-weight: 600; color: #7D8590; font-size: 0.85rem; white-space: nowrap; padding-top: 0.5rem; margin-right: 0.4rem; }
+
+        .nav-links { display: flex; flex-wrap: nowrap; justify-content: flex-end; gap: 2px; overflow-x: auto; scrollbar-width: none; }
+        .nav-links::-webkit-scrollbar { display: none; }
+
+        nav a.step-nav-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            color: #C7CDD6;
+            text-decoration: none;
+            font-weight: 600;
+            font-size: 0.84rem;
+            white-space: nowrap;
+            padding: 0.5rem 0.6rem;
+            border-radius: 6px;
+            transition: all 0.15s ease;
+            border-bottom: 2px solid transparent;
+        }
+
+        nav a.step-nav-link .nav-dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; opacity: 0.6; }
+        nav a.step-nav-link:hover { color: #FFFFFF; background: rgba(255,255,255,0.06); }
+        nav a.step-nav-link.active { color: #FFFFFF; border-bottom-color: currentColor; }
+        nav a.step-nav-link.active .nav-dot { opacity: 1; }
+
+        .nav-toggle {
+            display: none;
+            background: none;
+            border: 1px solid var(--ink-line);
+            color: #C7CDD6;
+            border-radius: 6px;
+            padding: 0.4rem 0.6rem;
+            font-size: 1rem;
+            cursor: pointer;
+            font-family: var(--font-sans);
+        }
+
+        main { max-width: 980px; margin: 2.2rem auto; padding: 0 1.5rem; }
+
+        /* ---------- SECTIONS ---------- */
+        section {
+            background: var(--surface);
+            padding: 2.3rem 2.3rem 2.3rem 2rem;
+            border-radius: 8px;
+            margin-bottom: 1.6rem;
+            border: 1px solid var(--line);
+            border-left: 4px solid var(--text-muted);
+            scroll-margin-top: 76px;
+        }
+
+        section.acc-arch { border-left-color: var(--arch-color); }
+        section.acc-api { border-left-color: var(--api-color); }
+        section.acc-fix { border-left-color: var(--fix-color); }
+        section.acc-neutral { border-left-color: #A9B1BC; }
+
+        .file-tag { font-family: var(--font-mono); font-size: 0.78rem; color: var(--text-muted); margin-bottom: 0.5rem; }
+
+        h2 { font-size: 1.55rem; color: #14171C; margin-top: 0; margin-bottom: 1.3rem; font-weight: 700; letter-spacing: -0.3px; }
+        h3 { font-size: 1.18rem; color: #2A2E34; margin-top: 1.7rem; font-weight: 700; }
+        p, li { max-width: none; }
+
+        /* ---------- Diagrama ---------- */
+        .flow-diagram {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+            flex-wrap: wrap;
+            margin: 1.8rem 0;
+            padding: 1.5rem;
+            background: #F7F9FC;
+            border-radius: 10px;
+            border: 1px solid var(--line);
+        }
+
+        .flow-box { padding: 0.9rem 1.1rem; border-radius: 8px; font-weight: 700; font-size: 0.92rem; text-align: center; min-width: 120px; border: 1px solid; }
+        .flow-box.api { background: #FDECEA; color: var(--api-color); border-color: #F7D0CA; }
+        .flow-box.vm { background: #EAF1FE; color: var(--arch-color); border-color: #C9DBFB; }
+        .flow-box.ui { background: #E6F5F4; color: var(--async-color); border-color: #BFE3DE; }
+
+        .flow-arrow { font-size: 1.3rem; color: var(--text-muted); font-weight: 700; }
+        .flow-caption { width: 100%; text-align: center; font-size: 0.85rem; color: var(--text-muted); margin-top: 0.6rem; }
+
+        /* ---------- Tabelas ---------- */
+        .data-table { width: 100%; border-collapse: collapse; margin: 1.2rem 0; font-size: 0.92rem; }
+        .data-table th, .data-table td { border: 1px solid var(--line); padding: 0.7rem 0.9rem; text-align: left; vertical-align: top; }
+        .data-table th { background: #F7F9FC; color: var(--arch-color); font-weight: 700; }
+        .data-table.accent-fix th { background: #FBF3E7; color: var(--fix-color); }
+
+        /* ---------- Código ---------- */
+        .code-container { position: relative; margin: 1.5rem 0; border-radius: 8px; overflow: hidden; }
+
+        .code-header {
+            background-color: #171A1F;
+            color: #8A93A0;
+            padding: 0.55rem 0.9rem;
+            font-family: var(--font-mono);
+            font-size: 0.82rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .code-header .dots { display: flex; gap: 5px; }
+        .code-header .dots .dot { width: 8px; height: 8px; }
+        .code-header .fname { flex: 1; }
+
+        .copy-btn {
+            background: #262B33;
+            color: #D6DEE7;
+            border: none;
+            border-radius: 5px;
+            padding: 0.25rem 0.6rem;
+            font-size: 0.76rem;
+            cursor: pointer;
+            font-family: var(--font-sans);
+            transition: background 0.15s ease;
+        }
+
+        .copy-btn:hover { background: #333A44; }
+
+        pre {
+            background-color: var(--code-bg);
+            color: var(--code-text);
+            padding: 1.4rem 1.5rem;
+            margin: 0;
+            overflow-x: auto;
+            font-family: var(--font-mono);
+            font-size: 0.86rem;
+        }
+
+        ul { padding-left: 1.2rem; }
+        li { margin-bottom: 0.6rem; }
+
+        /* ---------- Passos ---------- */
+        .step-box {
+            background-color: #FAFBFC;
+            border: 1px solid var(--line);
+            border-radius: 8px;
+            padding: 1.5rem;
+            margin-bottom: 1.8rem;
+            scroll-margin-top: 76px;
+        }
+
+        .step-box h3 {
+            margin-top: 0;
+            color: var(--text);
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+            flex-wrap: wrap;
+            gap: 0.4rem;
+        }
+
+        .step-progress {
+            font-family: var(--font-mono);
+            font-size: 0.74rem;
+            font-weight: 600;
+            color: var(--text-muted);
+            background: #EEF1F5;
+            padding: 0.2rem 0.6rem;
+            border-radius: 4px;
+        }
+
+        /* ---------- Mapa de pastas ---------- */
+        .tree-box { background: #FAFBFC; border: 1px solid var(--line); border-radius: 8px; padding: 1.3rem 1.5rem; margin: 1.2rem 0; }
+        .tree-box .tree-title { font-weight: 700; font-size: 0.92rem; margin-bottom: 0.8rem; color: var(--text); }
+        .tree-pre {
+            background-color: var(--code-bg);
+            color: var(--code-text);
+            padding: 1.2rem 1.4rem;
+            border-radius: 8px;
+            margin: 0;
+            overflow-x: auto;
+            font-family: var(--font-mono);
+            font-size: 0.84rem;
+            line-height: 1.6;
+        }
+
+        /* ---------- Caixas ---------- */
+        .checklist {
+            background: #F3F9F6;
+            border: 1px solid #CDE9DE;
+            border-left: 4px solid var(--async-color);
+            border-radius: 8px;
+            padding: 1.5rem 1.8rem;
+            margin-top: 1.5rem;
+        }
+
+        .checklist h3 { color: #0D7A5F; margin-top: 0; }
+        .checklist ul { list-style: none; padding-left: 0; }
+        .checklist li { padding-left: 1.8rem; position: relative; }
+        .checklist li::before { content: "✓"; position: absolute; left: 0; color: #0D7A5F; font-weight: 700; }
+
+        .tip-box {
+            background: #EAF1FE;
+            border-left: 4px solid var(--arch-color);
+            padding: 1rem 1.3rem;
+            border-radius: 6px;
+            margin: 1.2rem 0;
+            font-size: 0.95rem;
+        }
+
+        .tip-box strong { color: #14458C; }
+
+        .warn-box {
+            background: #FDECEA;
+            border-left: 4px solid var(--api-color);
+            padding: 1rem 1.3rem;
+            border-radius: 6px;
+            margin: 1.2rem 0;
+            font-size: 0.95rem;
+        }
+
+        .warn-box strong { color: #A31D03; }
+
+        .fix-box {
+            background: #FBF3E7;
+            border-left: 4px solid var(--fix-color);
+            padding: 1rem 1.3rem;
+            border-radius: 6px;
+            margin: 1.2rem 0;
+            font-size: 0.95rem;
+        }
+
+        .fix-box strong { color: #8A5A0C; }
+
+        /* ---------- Erros comuns ---------- */
+        .erro-item {
+            border: 1px solid var(--line);
+            border-radius: 8px;
+            margin-bottom: 1.2rem;
+            overflow: hidden;
+        }
+
+        .erro-titulo {
+            background: #FDECEA;
+            padding: 0.8rem 1.1rem;
+            font-family: var(--font-mono);
+            font-size: 0.85rem;
+            color: #A31D03;
+            font-weight: 700;
+            border-bottom: 1px solid var(--line);
+        }
+
+        .erro-corpo { padding: 1.1rem 1.3rem; font-size: 0.95rem; }
+        .erro-corpo p { margin-top: 0; }
+        .erro-corpo p:last-child { margin-bottom: 0; }
+
+        /* ---------- Downloads ---------- */
+        .download-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 12px;
+            margin-top: 1.3rem;
+        }
+
+        .download-btn {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            background: var(--bg);
+            color: #343A40;
+            text-decoration: none;
+            padding: 0.9rem 1rem;
+            border-radius: 8px;
+            font-weight: 600;
+            font-size: 0.92rem;
+            border: 1px solid var(--line);
+            transition: all 0.15s ease;
+        }
+
+        .download-btn:hover { border-color: var(--api-color); color: var(--api-color); }
+        .download-btn img { width: 22px; height: 22px; object-fit: contain; }
+
+        /* ---------- CTA ---------- */
+        .cta-section { border: none; padding: 0; background: transparent; }
+        .terminal-window { background: var(--ink-soft); border-radius: 10px; border: 1px solid var(--ink-line); overflow: hidden; }
+        .terminal-titlebar { display: flex; align-items: center; gap: 8px; padding: 10px 14px; background: #101317; border-bottom: 1px solid var(--ink-line); }
+        .terminal-titlebar .filename { margin-left: 8px; font-family: var(--font-mono); font-size: 0.8rem; color: #7D8590; }
+        .terminal-body { padding: 2rem 2.2rem 2.3rem; font-family: var(--font-mono); }
+        .term-line { color: #9AA4B2; margin: 0 0 0.4rem 0; font-size: 0.92rem; }
+        .term-prompt { color: var(--async-color); font-weight: 700; margin-right: 8px; }
+        .term-output { color: #C7CDD6; font-family: var(--font-sans); font-size: 0.95rem; line-height: 1.6; max-width: 62ch; margin: 0.6rem 0 1.6rem 0; }
+        .term-cta { display: inline-flex; align-items: center; gap: 8px; color: var(--api-color); text-decoration: none; font-weight: 700; font-size: 1rem; padding: 0.5rem 0; border-bottom: 1px solid transparent; }
+        .term-cta:hover { border-bottom-color: var(--api-color); }
+        .cta-meta { margin-top: 1rem; font-size: 0.85rem; color: #7D8590; font-family: var(--font-sans); }
+
+        footer { text-align: center; padding: 2.6rem; background: var(--ink); color: #7D8590; font-size: 0.88rem; }
+        .footer-inner { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 8px; margin: 0 auto; }
+        .footer-inner p { margin: 0; }
+        footer img { width: 18px; height: 18px; opacity: 0.8; flex-shrink: 0; }
+
+        @media (max-width: 860px) {
+            header h1 { font-size: 1.6rem; }
+            .nav-toggle { display: inline-flex; }
+            .nav-links { display: none; width: 100%; flex-direction: column; align-items: stretch; overflow-x: visible; margin-top: 0.6rem; }
+            .nav-links.open { display: flex; }
+            .nav-inner { flex-wrap: wrap; gap: 0.4rem; }
+            .nav-brand { padding-top: 0; }
+            section { padding: 1.6rem; }
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <div class="editor-window">
+            <div class="editor-titlebar">
+                <span class="dot d-api"></span>
+                <span class="dot d-fix"></span>
+                <span class="dot d-async"></span>
+                <span class="filename">pokedex-android/PokedexScreen.kt</span>
+            </div>
+            <div class="editor-body">
+                <p class="comment-line">// guia de aula — Kotlin + Jetpack Compose + PokéAPI</p>
+                <h1>Arquitetura e Consumo de APIs</h1>
+                <p class="subtitle">Construindo uma Pokédex Android de verdade, do projeto vazio até o app rodando no emulador.</p>
+                <div class="hero-images">
+                    <img src="pokedex.png" alt="Pokédex" class="hero-img" onerror="this.style.display='none'">
+                    <img src="pokebola.png" alt="Pokebola" class="hero-img" onerror="this.style.display='none'">
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <nav>
+        <div class="nav-inner">
+            <span class="nav-brand">pokedex-android/</span>
+            <button class="nav-toggle" id="navToggle" aria-expanded="false" aria-controls="navLinks">Menu</button>
+            <div class="nav-links" id="navLinks">
+                <a class="step-nav-link" href="#downloads"><span class="nav-dot"></span>Downloads</a>
+                <a class="step-nav-link" href="#arquitetura"><span class="nav-dot"></span>MVVM &amp; UDF</a>
+                <a class="step-nav-link" href="#apis"><span class="nav-dot"></span>APIs &amp; Coroutines</a>
+                <a class="step-nav-link" href="#livecoding"><span class="nav-dot"></span>Live Coding</a>
+                <a class="step-nav-link" href="#erros"><span class="nav-dot"></span>Erros Comuns</a>
+                <a class="step-nav-link" href="#atividade-cta"><span class="nav-dot"></span>Atividade</a>
+            </div>
+        </div>
+    </nav>
+
+    <main>
+
+        <section id="downloads" class="acc-neutral">
+            <div class="file-tag">assets/</div>
+            <h2>O Que Vamos Construir</h2>
+            <p>Ao final desta aula, você terá um aplicativo Android funcional que busca Pokémons reais na internet e os exibe dentro da ilustração de uma Pokédex: digite o nome ou o número, e o Pokémon aparece na "tela" do aparelho. Os botões <strong>Prev</strong> e <strong>Next</strong> navegam pela numeração.</p>
+            <p>Baixe a imagem abaixo antes de começar — ela será usada no visual final do app (Passo 6).</p>
+            <div class="download-grid">
+                <a href="pokedex.png" download="pokedex.png" class="download-btn">
+                    <img src="pokedex.png" alt="" onerror="this.style.display='none'">
+                    <span>Baixar pokedex.png</span>
+                </a>
+            </div>
+        </section>
+
+        <section id="arquitetura" class="acc-arch">
+            <div class="file-tag">01_arquitetura.md</div>
+            <h2>Arquitetura MVVM: Cada Coisa no Seu Lugar</h2>
+
+            <h3>O problema que a arquitetura resolve</h3>
+            <p>Imagine um app onde a <strong>Activity</strong> faz tudo: abre a conexão de rede, converte o JSON, guarda os dados numa variável, trata o erro, atualiza a tela e ainda controla a animação de carregamento. No começo funciona. O problema aparece depois:</p>
+            <ul>
+                <li><strong>O arquivo cresce sem parar.</strong> Telas reais chegam a 800, 1.500 linhas num único arquivo. Achar um bug vira arqueologia.</li>
+                <li><strong>Nada pode ser testado isoladamente.</strong> Para testar se o cálculo de um desconto está certo, você precisaria abrir a tela inteira num emulador — porque a regra de negócio está grudada no código visual.</li>
+                <li><strong>Duas pessoas não conseguem trabalhar na mesma tela.</strong> Se tudo está num arquivo só, dois desenvolvedores editando a mesma tela geram conflito a cada commit.</li>
+                <li><strong>Trocar qualquer coisa quebra o resto.</strong> Mudar de uma API para outra obrigaria a mexer no arquivo da tela — que não deveria nem saber que existe uma API.</li>
+            </ul>
+            <p>Esse padrão tem até apelido no mercado: <em>God Activity</em> (a "Activity Deus", que sabe e faz tudo). Arquitetura é, basicamente, o conjunto de regras que impede isso de acontecer.</p>
+
+            <h3>A evolução: de MVC a MVVM</h3>
+            <p>O Android não chegou ao MVVM de primeira. A comunidade passou por outros padrões, e entender por que cada um foi substituído ajuda a enxergar o que o MVVM está resolvendo:</p>
+
+            <table class="data-table">
+                <thead><tr><th>Padrão</th><th>Como funciona</th><th>Limitação no Android</th></tr></thead>
+                <tbody>
+                    <tr>
+                        <td><strong>MVC</strong><br><small>Model-View-Controller</small></td>
+                        <td>Um Controller recebe as ações do usuário e atualiza o Model e a View.</td>
+                        <td>No Android, a Activity acabava sendo View <em>e</em> Controller ao mesmo tempo — o que recria a God Activity.</td>
+                    </tr>
+                    <tr>
+                        <td><strong>MVP</strong><br><small>Model-View-Presenter</small></td>
+                        <td>Um Presenter comanda a View por meio de uma interface (<code>mostrarCarregando()</code>, <code>exibirLista()</code>...).</td>
+                        <td>Funciona, mas gera muito código repetitivo, e o Presenter guarda uma referência direta à View — o que causa vazamento de memória se a tela for destruída.</td>
+                    </tr>
+                    <tr>
+                        <td><strong>MVVM</strong><br><small>Model-View-ViewModel</small></td>
+                        <td>O ViewModel <em>expõe um estado</em>. A View observa esse estado e se redesenha sozinha quando ele muda.</td>
+                        <td>É o padrão recomendado hoje: o ViewModel não conhece a View, sobrevive à rotação e se encaixa naturalmente no Compose.</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <div class="tip-box"><strong>A diferença essencial entre MVP e MVVM:</strong> no MVP, o Presenter <em>manda</em> a tela fazer coisas ("mostre o loading agora"). No MVVM, o ViewModel apenas <em>declara</em> como as coisas estão ("o estado é Loading") e a tela reage. Isso inverte a dependência: o ViewModel deixa de conhecer a tela, e por isso pode ser testado sem nenhuma tela existir.</div>
+
+            <h3>As três camadas, no nosso projeto</h3>
+            <table class="data-table">
+                <thead><tr><th>Camada</th><th>Responsabilidade</th><th>No nosso projeto</th></tr></thead>
+                <tbody>
+                    <tr><td><strong>Model</strong></td><td>Representa os dados e como obtê-los. Não sabe nada sobre telas.</td><td>pacotes <code>model</code> e <code>network</code></td></tr>
+                    <tr><td><strong>ViewModel</strong></td><td>O cérebro da tela: pede os dados, guarda o estado atual, expõe para a UI.</td><td>pacote <code>viewmodel</code></td></tr>
+                    <tr><td><strong>View</strong></td><td>Só desenha o que o ViewModel mandou. Camada passiva.</td><td>pacote <code>ui</code></td></tr>
+                </tbody>
+            </table>
+
+            <div class="tip-box"><strong>Um teste rápido para saber se a separação está correta:</strong> percorra os <code>import</code> de cada arquivo. Se a tela importa algo de <code>network</code>, a separação foi quebrada. Se o ViewModel importa algo de <code>androidx.compose.ui</code> (fora do <code>mutableStateOf</code>), também. Cada camada deve depender apenas da que está imediatamente "abaixo" dela.</div>
+
+
+            <h3>O Fluxo Unidirecional de Dados (UDF)</h3>
+            <p>A regra que mantém tudo previsível: <strong>o estado desce, o evento sobe</strong>. A tela nunca altera dados por conta própria — ela apenas avisa o ViewModel que algo aconteceu.</p>
+
+            <div class="flow-diagram">
+                <div class="flow-box api">API<br><small>PokéAPI</small></div>
+                <span class="flow-arrow">→</span>
+                <div class="flow-box vm">ViewModel<br><small>uiState</small></div>
+                <span class="flow-arrow">→</span>
+                <div class="flow-box ui">UI<br><small>Compose</small></div>
+                <div class="flow-caption">↩ Cliques e digitação sobem da UI para o ViewModel por callback (ex: <code>viewModel.buscar(termo)</code>)</div>
+            </div>
+
+            <h3>Por que o ViewModel sobrevive à rotação da tela</h3>
+            <p>Quando o celular gira, a <strong>Activity é destruída e recriada do zero</strong> — é assim que o Android sempre funcionou, para poder recarregar recursos diferentes. Se o estado da tela morasse dentro da Activity, ele se perderia a cada rotação.</p>
+            <p>O <code>ViewModel</code> escapa disso porque não pertence à Activity: ele pertence a um objeto interno chamado <code>ViewModelStore</code>, que o sistema mantém vivo durante uma mudança de configuração (rotação, idioma, modo escuro) e só destrói de vez quando a tela é fechada por completo. Por isso, ao girar o aparelho, o Pokémon que já estava carregado continua na tela — sem uma nova chamada de rede.</p>
+
+            <div class="tip-box"><strong>Teste na prática:</strong> depois que o app estiver rodando, gire o emulador (Ctrl+F11). Se o Pokémon não recarregar do zero, é a prova visual de que o ViewModel sobreviveu.</div>
+
+            <h3>O que você ganha na prática com essa separação</h3>
+            <table class="data-table">
+                <thead><tr><th>Vantagem</th><th>Como se manifesta no dia a dia</th></tr></thead>
+                <tbody>
+                    <tr>
+                        <td><strong>Testabilidade</strong></td>
+                        <td>O <code>PokedexViewModel</code> é uma classe Kotlin comum, sem nada de visual. Dá para testar a lógica de busca e de navegação Prev/Next sem abrir um emulador — testes que rodam em segundos, não minutos.</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Trocar peças sem quebrar o resto</strong></td>
+                        <td>Se a PokéAPI mudasse de endereço ou fosse substituída, só o pacote <code>network</code> mudaria. A tela e o ViewModel continuariam intactos.</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Trabalho em paralelo</strong></td>
+                        <td>Com camadas separadas em arquivos distintos, uma pessoa pode cuidar da tela enquanto outra ajusta a camada de dados — sem conflito no Git.</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Sobrevivência a mudanças de configuração</strong></td>
+                        <td>Rotação, troca para modo escuro ou mudança de idioma não descartam os dados já carregados, porque eles não moram na tela.</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Onboarding mais rápido</strong></td>
+                        <td>Quem entra no projeto depois sabe onde procurar: erro de rede está em <code>network</code>, comportamento de tela está em <code>viewmodel</code>. Não precisa ler o projeto inteiro.</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <h3>Onde isso está no mercado</h3>
+            <p>Este não é um padrão inventado para a aula. O MVVM com fluxo unidirecional de dados é a <strong>arquitetura recomendada oficialmente pelo Google</strong> no guia de arquitetura de apps Android — a mesma referência que empresas usam para estruturar aplicativos em produção.</p>
+            <p>A stack que estamos usando é a combinação padrão do desenvolvimento Android atual:</p>
+            <ul>
+                <li><strong>Jetpack Compose</strong> — o kit de UI recomendado pelo Google para novos apps, substituindo os layouts em XML.</li>
+                <li><strong>ViewModel + Coroutines</strong> — parte do conjunto Jetpack, mantido pelo próprio Google.</li>
+                <li><strong>Retrofit</strong> — biblioteca de rede consolidada há anos como padrão de fato no ecossistema Android.</li>
+            </ul>
+            <p>Na prática, isso significa que um processo seletivo para vaga Android provavelmente vai perguntar sobre: separação de camadas, por que o ViewModel sobrevive à rotação, o que acontece se você chamar rede na Main Thread, e como você representa estados de tela. Todos esses pontos estão neste projeto.</p>
+
+            <h3>Para onde isso cresce</h3>
+            <p>O que construímos aqui é a base sólida — mas propositalmente enxuta. Em projetos maiores, três peças costumam entrar em cima dessa mesma estrutura, sem derrubar nada do que você já escreveu:</p>
+            <ul>
+                <li><strong>Repository</strong> — uma camada entre o ViewModel e as fontes de dados, para quando existir mais de uma origem (rede + banco local, por exemplo).</li>
+                <li><strong>Room</strong> — banco de dados local, permitindo que o app funcione offline com os dados já baixados.</li>
+                <li><strong>Injeção de dependência (Hilt/Koin)</strong> — para montar automaticamente as dependências entre as camadas, em vez de instanciá-las na mão.</li>
+            </ul>
+            <div class="tip-box"><strong>Repare no ganho da arquitetura:</strong> nenhuma dessas três adições exigiria reescrever a tela ou o modelo de dados. Elas se encaixam <em>entre</em> as camadas existentes. Um projeto sem separação clara não teria essa flexibilidade — cada nova peça obrigaria a mexer em tudo.</div>
+        </section>
+
+        <section id="apis" class="acc-api">
+            <div class="file-tag">02_networking.md</div>
+            <h2>Consumindo uma API REST com Retrofit e Coroutines</h2>
+            <p>Nossa Pokédex busca os dados na <span class="kw-net">PokéAPI</span>, um serviço público e gratuito. O endereço que vamos usar é:</p>
+
+            <div class="code-container">
+                <div class="code-header">
+                    <span class="dots"><span class="dot d-api"></span><span class="dot d-fix"></span><span class="dot d-async"></span></span>
+                    <span class="fname">GET</span>
+                    <button class="copy-btn" onclick="copyCode(this)">Copiar</button>
+                </div>
+<pre><code>https://pokeapi.co/api/v2/pokemon/bulbasaur
+https://pokeapi.co/api/v2/pokemon/1</code></pre>
+            </div>
+
+            <p>Repare que os dois endereços funcionam: a PokéAPI aceita tanto o <strong>nome</strong> quanto o <strong>número</strong> do Pokémon no mesmo lugar da URL. É por isso que nosso campo de busca aceita os dois sem precisar de lógica extra.</p>
+
+            <h3>O que significa "API REST"</h3>
+            <p>Uma <strong>API</strong> é um conjunto de endereços que um servidor disponibiliza para outros programas consultarem — diferente de um site, que devolve páginas para humanos lerem, uma API devolve dados brutos para programas processarem.</p>
+            <p><strong>REST</strong> é o estilo mais comum de organizar esses endereços. Ele usa os próprios verbos do protocolo HTTP para indicar a intenção:</p>
+            <table class="data-table">
+                <thead><tr><th>Verbo</th><th>Significado</th><th>Exemplo</th></tr></thead>
+                <tbody>
+                    <tr><td><code>GET</code></td><td>Buscar dados (não altera nada no servidor)</td><td>Consultar um Pokémon</td></tr>
+                    <tr><td><code>POST</code></td><td>Criar um registro novo</td><td>Cadastrar um usuário</td></tr>
+                    <tr><td><code>PUT</code> / <code>PATCH</code></td><td>Atualizar um registro existente</td><td>Editar um perfil</td></tr>
+                    <tr><td><code>DELETE</code></td><td>Remover um registro</td><td>Excluir uma postagem</td></tr>
+                </tbody>
+            </table>
+            <p>Nosso app usa apenas <code>GET</code>, porque só consulta dados — a PokéAPI é somente leitura. É por isso que a anotação no código é <code>@GET</code>.</p>
+
+            <div class="tip-box"><strong>Como conferir o que a API devolve, antes de escrever código:</strong> abra <code>https://pokeapi.co/api/v2/pokemon/1</code> direto no navegador. Você verá o JSON cru — a mesma estrutura que suas <code>data class</code> precisam espelhar. Esse é o primeiro passo ao integrar qualquer API nova: olhar a resposta real antes de modelar as classes.</div>
+
+            <h3>Por que usar Retrofit em vez de fazer na mão</h3>
+            <p>É perfeitamente possível fazer uma requisição HTTP em Android sem nenhuma biblioteca, usando as classes nativas do Java. O problema é a quantidade de trabalho manual: abrir a conexão, definir o método, ler a resposta byte a byte, converter para texto, converter o texto em objetos, fechar a conexão, tratar cada tipo de falha — e repetir tudo isso a cada endpoint novo.</p>
+            <table class="data-table">
+                <thead><tr><th>Tarefa</th><th>Na mão</th><th>Com Retrofit</th></tr></thead>
+                <tbody>
+                    <tr><td>Montar a URL com parâmetros</td><td>Concatenar strings manualmente</td><td>Anotação <code>@Path</code> / <code>@Query</code></td></tr>
+                    <tr><td>Ler a resposta</td><td>Abrir stream, ler, fechar</td><td>Automático</td></tr>
+                    <tr><td>Converter JSON em objetos</td><td>Percorrer o JSON campo a campo</td><td>GSON faz sozinho</td></tr>
+                    <tr><td>Executar fora da Main Thread</td><td>Criar e gerenciar threads</td><td><code>suspend fun</code> resolve</td></tr>
+                </tbody>
+            </table>
+            <p>Além de reduzir código, isso reduz <em>bugs</em>: cada linha de conversão manual de JSON é uma chance de erro de digitação que só aparece em tempo de execução.</p>
+
+            <h3>A Main Thread e o congelamento do app</h3>
+            <p>O Android reserva a <span class="kw-async">Main Thread</span> (ou UI Thread) exclusivamente para desenhar a interface — 60 a 120 vezes por segundo. Se uma requisição de rede for disparada nessa linha, tudo trava enquanto o servidor não responde, e o Android mata o app com o erro <span class="kw-async">ANR (App Not Responding)</span>.</p>
+            <p>Isso não é um detalhe teórico: o sistema operacional realmente proíbe essa operação. Tentar fazer rede na Main Thread lança uma exceção chamada <code>NetworkOnMainThreadException</code> — o Android prefere derrubar o app a deixar a interface congelada.</p>
+
+            <h3>A solução: funções suspend</h3>
+            <p>Marcamos a função de rede com o modificador <code>suspend</code>. Isso diz ao Kotlin que ela pode ser "pausada" enquanto espera a resposta, liberando a Main Thread para continuar desenhando a tela. O Retrofit cuida automaticamente de executar a chamada em segundo plano — não precisamos escrever <code>Dispatchers.IO</code> manualmente, porque ele já faz isso por baixo dos panos.</p>
+
+            <div class="tip-box"><strong>Coroutine não é o mesmo que thread:</strong> criar uma thread é caro para o sistema — cada uma consome memória própria. Coroutines são muito mais leves: milhares delas podem rodar sobre uma quantidade pequena de threads reais, porque quando uma "pausa" esperando a rede, a thread é liberada para outra tarefa em vez de ficar parada. É por isso que o Kotlin adotou esse modelo em vez de expor threads diretamente.</div>
+
+            <div class="tip-box"><strong>Onde a Coroutine começa:</strong> uma função <code>suspend</code> só pode ser chamada de dentro de outra função <code>suspend</code> ou de um escopo de Coroutine. No nosso app, esse ponto de partida é o <code>viewModelScope.launch { }</code> dentro do ViewModel — você vai ver isso no Passo 3.</div>
+        </section>
+
+        <section id="livecoding" class="acc-neutral">
+            <div class="file-tag">03_livecoding/</div>
+            <h2>Live Coding Passo a Passo</h2>
+            <p>Vamos do projeto vazio até o app rodando. No <strong>Passo 5</strong> a Pokédex já funciona; no <strong>Passo 6</strong> ela ganha o visual final.</p>
+
+            <div class="step-box" id="passo-0">
+                <h3>Passo 0 — Criando e Configurando o Projeto <span class="step-progress">setup</span></h3>
+
+                <p><strong>0.1 — Criar o projeto</strong></p>
+                <ol>
+                    <li>No Android Studio: <strong>New Project</strong> → template <strong>Empty Activity</strong> (o do Compose, não o de Views/XML).</li>
+                    <li>Configure assim:
+                        <ul>
+                            <li><strong>Name:</strong> PokedexNovo</li>
+                            <li><strong>Package name:</strong> <code>com.seunome.pokedexnovo</code></li>
+                            <li><strong>Language:</strong> Kotlin</li>
+                            <li><strong>Minimum SDK:</strong> API 24 (Android 7.0)</li>
+                        </ul>
+                    </li>
+                    <li>Clique em <strong>Finish</strong> e aguarde o Gradle sincronizar.</li>
+                </ol>
+                <div class="tip-box"><strong>Se você usar outro nome de pacote:</strong> tudo bem, mas troque <code>com.seunome.pokedexnovo</code> por ele em <em>todos</em> os blocos de código a seguir — inclusive nas linhas de <code>import</code>.</div>
+
+                <p><strong>0.2 — Fixar as versões das bibliotecas</strong></p>
+                <p>Este é o passo que mais evita dor de cabeça. O template do Android Studio sempre puxa as versões mais recentes do dia — que mudam conforme quando cada um instalou a IDE, e frequentemente exigem um SDK que ainda não está instalado na máquina. Vamos fixar um conjunto conhecido e estável.</p>
+                <p>Abra <code>gradle/libs.versions.toml</code> e deixe o bloco <code>[versions]</code> exatamente assim:</p>
+                <div class="code-container">
+                    <div class="code-header">
+                        <span class="dots"><span class="dot d-api"></span><span class="dot d-fix"></span><span class="dot d-async"></span></span>
+                        <span class="fname">gradle/libs.versions.toml</span>
+                        <button class="copy-btn" onclick="copyCode(this)">Copiar</button>
+                    </div>
+<pre><code>[versions]
+agp = "8.10.0"
+kotlin = "2.0.21"
+coreKtx = "1.15.0"
+junit = "4.13.2"
+junitVersion = "1.3.0"
+espressoCore = "3.7.0"
+lifecycleRuntimeKtx = "2.8.7"
+activityCompose = "1.9.3"
+composeBom = "2024.09.00"</code></pre>
+                </div>
+                <div class="warn-box"><strong>Não acrescente linhas extras nesse bloco.</strong> Se você vir alguma versão duplicada (por exemplo, um <code>coreKtxVersion</code> além do <code>coreKtx</code>), apague a duplicada — ela costuma ser deixada pelo "AGP Upgrade Assistant" e é a causa de erros de compilação difíceis de rastrear. Veja o item correspondente em <a href="#erros">Erros Comuns</a>.</div>
+
+                <p><strong>0.3 — Ajustar o compileSdk</strong></p>
+                <p>Abra <code>build.gradle.kts (Module :app)</code> e confirme que o bloco <code>android { }</code> começa assim:</p>
+                <div class="code-container">
+                    <div class="code-header">
+                        <span class="dots"><span class="dot d-api"></span><span class="dot d-fix"></span><span class="dot d-async"></span></span>
+                        <span class="fname">build.gradle.kts (Module :app)</span>
+                        <button class="copy-btn" onclick="copyCode(this)">Copiar</button>
+                    </div>
+<pre><code>android {
+    namespace = "com.seunome.pokedexnovo"
+    compileSdk = 35
+
+    defaultConfig {
+        applicationId = "com.seunome.pokedexnovo"
+        minSdk = 24
+        targetSdk = 35
+        versionCode = 1
+        versionName = "1.0"
+
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+    }
+    // ... o resto do bloco continua como está</code></pre>
+                </div>
+
+                <p><strong>0.4 — Adicionar as dependências</strong></p>
+                <p>Ainda em <code>build.gradle.kts (Module :app)</code>, localize o bloco <code>dependencies { }</code>. Ele já vem preenchido com várias linhas <code>libs.xxx</code> — <strong>não apague nenhuma delas</strong>. Apenas acrescente as quatro linhas novas no final, antes da chave de fechamento:</p>
+                <div class="code-container">
+                    <div class="code-header">
+                        <span class="dots"><span class="dot d-api"></span><span class="dot d-fix"></span><span class="dot d-async"></span></span>
+                        <span class="fname">build.gradle.kts (Module :app)</span>
+                        <button class="copy-btn" onclick="copyCode(this)">Copiar</button>
+                    </div>
+<pre><code>dependencies {
+    // ... todas as linhas libs.xxx que já existem ficam aqui, intactas
+
+    // adicione a partir daqui:
+
+    // Retrofit + GSON: comunicação com a API e conversão do JSON
+    implementation("com.squareup.retrofit2:retrofit:2.9.0")
+    implementation("com.squareup.retrofit2:converter-gson:2.9.0")
+
+    // Coil: baixa e exibe imagens da internet no Compose
+    implementation("io.coil-kt:coil-compose:2.6.0")
+
+    // ViewModel integrado ao Compose
+    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.0")
+}</code></pre>
+                </div>
+
+                <p><strong>0.5 — Permissão de internet</strong></p>
+                <p>Abra <code>AndroidManifest.xml</code> (pasta <code>manifests/</code>) e insira a linha abaixo <em>acima</em> da tag <code>&lt;application&gt;</code>:</p>
+                <div class="code-container">
+                    <div class="code-header">
+                        <span class="dots"><span class="dot d-api"></span><span class="dot d-fix"></span><span class="dot d-async"></span></span>
+                        <span class="fname">AndroidManifest.xml</span>
+                        <button class="copy-btn" onclick="copyCode(this)">Copiar</button>
+                    </div>
+<pre><code>&lt;uses-permission android:name="android.permission.INTERNET" /&gt;</code></pre>
+                </div>
+                <div class="warn-box"><strong>Sem essa linha o app compila normalmente</strong> — e falha só na hora de buscar, com um erro de conexão que parece problema de internet. É um dos erros mais confusos de diagnosticar justamente por isso.</div>
+
+                <p><strong>0.6 — Adicionar a imagem</strong></p>
+                <p>Arraste o arquivo <code>pokedex.png</code> (baixado no início desta página) para a pasta <code>res/drawable</code> no painel do Android Studio. Confirme na janela que aparecer.</p>
+
+                <p><strong>0.7 — Criar os pacotes</strong></p>
+                <p>No painel <strong>Project</strong>, clique com o botão direito no pacote <code>com.seunome.pokedexnovo</code> → <strong>New &gt; Package</strong>. Crie três pacotes: <code>model</code>, <code>network</code> e <code>viewmodel</code>.</p>
+                <div class="tip-box"><strong>E o pacote <code>ui</code>?</strong> Esse já existe — o template criou <code>ui.theme</code> junto com o projeto. No Passo 4 você vai criar um arquivo dentro de <code>ui</code>, ao lado da pasta <code>theme</code>.</div>
+
+                <p>Por fim, clique em <strong>Sync Now</strong> na barra que aparece no topo do editor e aguarde terminar.</p>
+            </div>
+
+            <div class="tree-box">
+                <div class="tree-title">🗂️ Mapa de Pastas — como o projeto vai ficar</div>
+                <p style="margin-top:0; font-size:0.9rem; color:var(--text-muted);">Volte aqui sempre que tiver dúvida sobre em qual pasta um arquivo entra.</p>
+<pre class="tree-pre">app
+ └─ java
+     └─ com.seunome.pokedexnovo
+          ├─ model
+          │    └─ Pokemon.kt              (novo, Passo 1)
+          ├─ network
+          │    └─ PokeApiService.kt       (novo, Passo 2)
+          ├─ viewmodel
+          │    └─ PokedexViewModel.kt     (novo, Passo 3)
+          ├─ ui
+          │    ├─ theme                   (já existe — não mexer)
+          │    │    ├─ Color.kt
+          │    │    ├─ Theme.kt
+          │    │    └─ Type.kt
+          │    └─ PokedexScreen.kt        (novo, Passo 4)
+          └─ MainActivity.kt              (já existe — editar no Passo 5)
+
+app/res/drawable
+     └─ pokedex.png                       (adicionado no Passo 0.6)</pre>
+            </div>
+
+            <div class="step-box" id="passo-1">
+                <h3>Passo 1 — O Modelo de Dados <span class="step-progress">1 de 6</span></h3>
+                <p><strong>Local:</strong> pacote <code>model</code> &nbsp;|&nbsp; <strong>Arquivo:</strong> <code>Pokemon.kt</code></p>
+                <p>Estas <code>data class</code> são o "molde" que o Retrofit usa para transformar o JSON da API em objetos Kotlin. Cada propriedade corresponde a um campo da resposta.</p>
+                <div class="code-container">
+                    <div class="code-header">
+                        <span class="dots"><span class="dot d-api"></span><span class="dot d-fix"></span><span class="dot d-async"></span></span>
+                        <span class="fname">model/Pokemon.kt</span>
+                        <button class="copy-btn" onclick="copyCode(this)">Copiar</button>
+                    </div>
+<pre><code>package com.seunome.pokedexnovo.model
+
+import com.google.gson.annotations.SerializedName
+
+data class PokemonDetailResponse(
+    val id: Int,
+    val name: String,
+    val sprites: PokemonSprites
+)
+
+data class PokemonSprites(
+    @SerializedName("front_default") val frontDefault: String?,
+    val other: PokemonOtherSprites?
+)
+
+data class PokemonOtherSprites(
+    val showdown: PokemonShowdownSprites?
+)
+
+data class PokemonShowdownSprites(
+    @SerializedName("front_default") val frontDefault: String?
+)</code></pre>
+                </div>
+                <div class="tip-box"><strong>Para que serve o <code>@SerializedName</code>?</strong> No JSON, o campo se chama <code>front_default</code> (com underscore), mas em Kotlin usamos <code>frontDefault</code> (padrão camelCase). Essa anotação faz a ponte entre os dois nomes. Quando o nome é igual nos dois lados — como <code>id</code> e <code>name</code> — o GSON conecta sozinho e a anotação não é necessária.</div>
+                <div class="tip-box"><strong>Por que tantos níveis aninhados?</strong> Porque o JSON da PokéAPI é assim: a imagem animada fica em <code>sprites.other.showdown.front_default</code>. Cada nível do JSON vira uma <code>data class</code>. Os <code>?</code> indicam que o campo pode vir vazio — nem todo Pokémon tem sprite animado, e nesse caso usaremos a imagem estática como reserva.</div>
+            </div>
+
+            <div class="step-box" id="passo-2">
+                <h3>Passo 2 — A Camada de Rede <span class="step-progress">2 de 6</span></h3>
+                <p><strong>Local:</strong> pacote <code>network</code> &nbsp;|&nbsp; <strong>Arquivo:</strong> <code>PokeApiService.kt</code></p>
+                <div class="code-container">
+                    <div class="code-header">
+                        <span class="dots"><span class="dot d-api"></span><span class="dot d-fix"></span><span class="dot d-async"></span></span>
+                        <span class="fname">network/PokeApiService.kt</span>
+                        <button class="copy-btn" onclick="copyCode(this)">Copiar</button>
+                    </div>
+<pre><code>package com.seunome.pokedexnovo.network
+
+import com.seunome.pokedexnovo.model.PokemonDetailResponse
+import retrofit2.Retrofit
+import retrofit2.converter.gson.GsonConverterFactory
+import retrofit2.http.GET
+import retrofit2.http.Path
+
+interface PokeApiService {
+    @GET("pokemon/{nameOrId}")
+    suspend fun getPokemon(@Path("nameOrId") nameOrId: String): PokemonDetailResponse
+}
+
+object RetrofitClient {
+    private const val BASE_URL = "https://pokeapi.co/api/v2/"
+
+    val apiService: PokeApiService by lazy {
+        Retrofit.Builder()
+            .baseUrl(BASE_URL)
+            .addConverterFactory(GsonConverterFactory.create())
+            .build()
+            .create(PokeApiService::class.java)
+    }
+}</code></pre>
+                </div>
+                <div class="tip-box"><strong>Você escreveu uma <code>interface</code>, não uma classe.</strong> Repare que a função <code>getPokemon</code> não tem corpo — não existe nenhum código dizendo <em>como</em> fazer a requisição. Quem escreve essa implementação é o próprio Retrofit, em tempo de execução, lendo as anotações <code>@GET</code> e <code>@Path</code>. Você só declara <em>o que</em> quer; a biblioteca resolve o <em>como</em>.</div>
+                <div class="tip-box"><strong>Como <code>{nameOrId}</code> vira parte da URL:</strong> o trecho entre chaves em <code>@GET("pokemon/{nameOrId}")</code> é um espaço reservado. A anotação <code>@Path("nameOrId")</code> no parâmetro diz ao Retrofit para substituí-lo pelo valor recebido. Chamar <code>getPokemon("pikachu")</code> gera a URL <code>.../pokemon/pikachu</code>.</div>
+                <div class="tip-box"><strong>Por que <code>by lazy</code>?</strong> Construir um cliente Retrofit tem custo (configura conversores, timeouts, conexões). O <code>by lazy</code> garante que isso aconteça só na primeira vez que <code>apiService</code> for usado, e todas as chamadas seguintes reaproveitam a mesma instância — em vez de montar um cliente novo a cada busca.</div>
+            </div>
+
+            <div class="step-box" id="passo-3">
+                <h3>Passo 3 — O ViewModel <span class="step-progress">3 de 6</span></h3>
+                <p><strong>Local:</strong> pacote <code>viewmodel</code> &nbsp;|&nbsp; <strong>Arquivo:</strong> <code>PokedexViewModel.kt</code></p>
+                <div class="code-container">
+                    <div class="code-header">
+                        <span class="dots"><span class="dot d-api"></span><span class="dot d-fix"></span><span class="dot d-async"></span></span>
+                        <span class="fname">viewmodel/PokedexViewModel.kt</span>
+                        <button class="copy-btn" onclick="copyCode(this)">Copiar</button>
+                    </div>
+<pre><code>package com.seunome.pokedexnovo.viewmodel
+
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import com.seunome.pokedexnovo.model.PokemonDetailResponse
+import com.seunome.pokedexnovo.network.RetrofitClient
+import kotlinx.coroutines.launch
+
+sealed interface PokedexUiState {
+    object Loading : PokedexUiState
+    data class Success(val pokemon: PokemonDetailResponse) : PokedexUiState
+    object NotFound : PokedexUiState
+}
+
+class PokedexViewModel : ViewModel() {
+
+    var uiState: PokedexUiState by mutableStateOf(PokedexUiState.Loading)
+        private set
+
+    private var currentId = 1
+
+    init {
+        buscar(currentId.toString())
+    }
+
+    fun buscar(termo: String) {
+        if (termo.isBlank()) return
+        viewModelScope.launch {
+            uiState = PokedexUiState.Loading
+            uiState = try {
+                val pokemon = RetrofitClient.apiService.getPokemon(termo.lowercase())
+                currentId = pokemon.id
+                PokedexUiState.Success(pokemon)
+            } catch (e: Exception) {
+                PokedexUiState.NotFound
+            }
+        }
+    }
+
+    fun anterior() {
+        if (currentId > 1) buscar((currentId - 1).toString())
+    }
+
+    fun proximo() {
+        buscar((currentId + 1).toString())
+    }
+}</code></pre>
+                </div>
+
+                <div class="tip-box"><strong>Por que uma <code>sealed interface</code> em vez de variáveis soltas?</strong> A alternativa ingênua seria ter <code>isLoading: Boolean</code>, <code>naoEncontrado: Boolean</code> e <code>pokemon: Pokemon?</code> ao mesmo tempo. Isso permite combinações sem sentido — como <code>isLoading = true</code> e <code>naoEncontrado = true</code> simultaneamente. Com uma <code>sealed interface</code>, a tela está sempre em <strong>exatamente um</strong> desses três estados, e o Kotlin obriga o <code>when</code> a tratar todos eles. Estados impossíveis simplesmente não compilam.</div>
+
+                <div class="tip-box"><strong>O que <code>private set</code> faz:</strong> permite que qualquer um <em>leia</em> o <code>uiState</code>, mas só o próprio ViewModel pode <em>alterá-lo</em>. É o que impede a tela de mudar o estado por conta própria — exatamente a regra do fluxo unidirecional (o evento sobe, o estado desce).</div>
+
+                <div class="tip-box"><strong>Por que <code>viewModelScope</code> e não outro escopo?</strong> Toda Coroutine iniciada aí é cancelada automaticamente quando o ViewModel é destruído. Se o usuário fechar a tela no meio de uma busca, a requisição é interrompida sozinha — sem isso, ela continuaria rodando e tentaria atualizar uma tela que não existe mais.</div>
+
+                <div class="tip-box"><strong>O que o <code>init { }</code> faz:</strong> é executado uma única vez, quando o ViewModel é criado. É por isso que o app já abre mostrando o Pokémon nº 1, sem o usuário precisar buscar nada.</div>
+
+                <div class="tip-box"><strong>Por que <code>currentId</code> é atualizado dentro do <code>try</code>:</strong> ele só muda depois que a busca deu certo. Assim, se o usuário digitar algo inválido, os botões Prev/Next continuam navegando a partir do último Pokémon que realmente existiu.</div>
+            </div>
+
+            <div class="step-box" id="passo-4">
+                <h3>Passo 4 — A Tela (versão funcional) <span class="step-progress">4 de 6</span></h3>
+                <p><strong>Local:</strong> pacote <code>ui</code> &nbsp;|&nbsp; <strong>Arquivo:</strong> <code>PokedexScreen.kt</code></p>
+                <div class="warn-box"><strong>Atenção ao criar este arquivo:</strong> clique com o botão direito no pacote <code>ui</code> — <em>não</em> na pasta <code>theme</code> que está dentro dele. O arquivo deve ficar ao lado de <code>theme</code>, não dentro. Se errar, veja como corrigir em <a href="#erros">Erros Comuns</a>.</div>
+                <p>Vamos começar com uma versão simples, sem decoração. O objetivo aqui é ver o app funcionando o quanto antes.</p>
+                <div class="code-container">
+                    <div class="code-header">
+                        <span class="dots"><span class="dot d-api"></span><span class="dot d-fix"></span><span class="dot d-async"></span></span>
+                        <span class="fname">ui/PokedexScreen.kt</span>
+                        <button class="copy-btn" onclick="copyCode(this)">Copiar</button>
+                    </div>
+<pre><code>package com.seunome.pokedexnovo.ui
+
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.unit.dp
+import androidx.lifecycle.viewmodel.compose.viewModel
+import coil.compose.AsyncImage
+import com.seunome.pokedexnovo.viewmodel.PokedexUiState
+import com.seunome.pokedexnovo.viewmodel.PokedexViewModel
+
+@Composable
+fun PokedexScreen(viewModel: PokedexViewModel = viewModel()) {
+    var termoBusca by remember { mutableStateOf("") }
+
+    Column(
+        modifier = Modifier.fillMaxSize().padding(24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        when (val state = viewModel.uiState) {
+            is PokedexUiState.Loading -> Text("Loading...")
+            is PokedexUiState.NotFound -> Text("Not found!")
+            is PokedexUiState.Success -> {
+                val pokemon = state.pokemon
+                AsyncImage(
+                    model = pokemon.sprites.other?.showdown?.frontDefault
+                        ?: pokemon.sprites.frontDefault,
+                    contentDescription = pokemon.name,
+                    modifier = Modifier.size(180.dp)
+                )
+                Text(
+                    "${pokemon.id} - ${pokemon.name.replaceFirstChar { it.uppercase() }}",
+                    style = MaterialTheme.typography.titleLarge
+                )
+            }
+        }
+
+        Spacer(Modifier.height(24.dp))
+
+        OutlinedTextField(
+            value = termoBusca,
+            onValueChange = { termoBusca = it },
+            label = { Text("Name or Number") },
+            singleLine = true,
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+            keyboardActions = KeyboardActions(onSearch = { viewModel.buscar(termoBusca) }),
+            modifier = Modifier.fillMaxWidth()
+        )
+
+        Spacer(Modifier.height(24.dp))
+
+        Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+            Button(onClick = { viewModel.anterior() }) { Text("Prev &lt;") }
+            Button(onClick = { viewModel.proximo() }) { Text("Next &gt;") }
+        }
+    }
+}</code></pre>
+                </div>
+
+                <div class="tip-box"><strong>O operador <code>?:</code> (Elvis) na escolha da imagem:</strong> a linha <code>other?.showdown?.frontDefault ?: sprites.frontDefault</code> significa "use o sprite animado; se ele não existir, use o estático". Os <code>?.</code> evitam o app quebrar quando algum nível do JSON vier vazio.</div>
+
+                <div class="tip-box"><strong>Por que <code>remember</code> no campo de busca?</strong> A função <code>PokedexScreen</code> é reexecutada toda vez que a tela precisa ser redesenhada (isso se chama <em>recomposição</em>). Sem o <code>remember</code>, a variável <code>termoBusca</code> seria recriada como texto vazio a cada redesenho, e o que o usuário digitou sumiria da tela.</div>
+
+                <div class="tip-box"><strong>Diferença entre <code>remember</code> e o ViewModel:</strong> o texto sendo digitado é um estado <em>temporário da tela</em> — pode se perder na rotação sem prejuízo. Já o Pokémon carregado é um estado <em>da aplicação</em>, que vale a pena preservar. Por isso um fica no <code>remember</code> e o outro no ViewModel.</div>
+
+                <div class="tip-box"><strong>O que <code>ImeAction.Search</code> faz:</strong> troca a tecla "Enter" do teclado do celular por uma tecla de lupa/busca. O <code>KeyboardActions(onSearch = ...)</code> define o que acontece ao pressioná-la — no caso, dispara a busca sem precisar de um botão separado.</div>
+            </div>
+
+            <div class="step-box" id="passo-5">
+                <h3>Passo 5 — MainActivity: Ligando Tudo <span class="step-progress">5 de 6</span></h3>
+                <p><strong>Local:</strong> raiz do pacote <code>com.seunome.pokedexnovo</code> &nbsp;|&nbsp; <strong>Arquivo:</strong> <code>MainActivity.kt</code> (já existe — apenas substitua o conteúdo)</p>
+                <div class="code-container">
+                    <div class="code-header">
+                        <span class="dots"><span class="dot d-api"></span><span class="dot d-fix"></span><span class="dot d-async"></span></span>
+                        <span class="fname">MainActivity.kt</span>
+                        <button class="copy-btn" onclick="copyCode(this)">Copiar</button>
+                    </div>
+<pre><code>package com.seunome.pokedexnovo
+
+import android.os.Bundle
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.ui.Modifier
+import com.seunome.pokedexnovo.ui.PokedexScreen
+
+class MainActivity : ComponentActivity() {
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        setContent {
+            MaterialTheme {
+                Surface(modifier = Modifier.fillMaxSize()) {
+                    PokedexScreen()
+                }
+            }
+        }
+    }
+}</code></pre>
+                </div>
+
+                <div class="warn-box"><strong>Sem este passo, nada aparece na tela.</strong> Todos os Composables escritos até aqui só existem "no papel" até serem chamados de dentro do <code>setContent { }</code>. É a linha <code>PokedexScreen()</code> que liga o seu código à tela do celular.</div>
+
+                <div class="tip-box"><strong>Por que <code>MaterialTheme</code> e não o tema do projeto?</strong> O template gera um tema com nome baseado no nome do projeto (algo como <code>PokedexNovoTheme</code>). Como esse nome varia de aluno para aluno, usamos o <code>MaterialTheme</code> padrão, que funciona igual em qualquer projeto e evita erro de referência.</div>
+
+                <p style="margin-top:1.2rem;"><strong>▶ Rode o app agora</strong> (botão verde no topo, com um emulador selecionado). Este é o primeiro momento em que a Pokédex deve funcionar de verdade: ela abre mostrando o Bulbasaur, e os botões e a busca já respondem.</p>
+            </div>
+
+            <div class="step-box" id="passo-6">
+                <h3>Passo 6 — O Visual Final <span class="step-progress">6 de 6</span></h3>
+                <p><strong>Local:</strong> pacote <code>ui</code> &nbsp;|&nbsp; <strong>Arquivo:</strong> <code>PokedexScreen.kt</code> (substitua o conteúdo do Passo 4)</p>
+                <p>Agora que tudo funciona, vamos encaixar o app dentro da ilustração da Pokédex. As constantes no topo são as coordenadas reais da imagem, medidas em porcentagem — é isso que faz o Pokémon cair exatamente sobre a grama.</p>
+                <div class="code-container">
+                    <div class="code-header">
+                        <span class="dots"><span class="dot d-api"></span><span class="dot d-fix"></span><span class="dot d-async"></span></span>
+                        <span class="fname">ui/PokedexScreen.kt</span>
+                        <button class="copy-btn" onclick="copyCode(this)">Copiar</button>
+                    </div>
+<pre><code>package com.seunome.pokedexnovo.ui
+
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
+import androidx.lifecycle.viewmodel.compose.viewModel
+import coil.compose.AsyncImage
+import com.seunome.pokedexnovo.R
+import com.seunome.pokedexnovo.viewmodel.PokedexUiState
+import com.seunome.pokedexnovo.viewmodel.PokedexViewModel
+
+// Cores retiradas do projeto web original
+private val CorTexto = Color(0xFF3A444D)
+private val CorBorda = Color(0xFF333333)
+private val CorBotao = Color(0xFF444444)
+
+// Coordenadas medidas na imagem pokedex.png (em % da largura/altura)
+private const val TELA_ESQUERDA = 0.160f
+private const val TELA_TOPO = 0.270f
+private const val TELA_LARGURA = 0.588f
+private const val TELA_ALTURA = 0.261f
+private const val MOLDURA_BASE = 0.628f
+private const val MOLDURA_ESQUERDA = 0.080f
+private const val MOLDURA_LARGURA = 0.732f
+
+@Composable
+fun PokedexScreen(viewModel: PokedexViewModel = viewModel()) {
+    var termoBusca by remember { mutableStateOf("") }
+
+    Box(
+        modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),
+        contentAlignment = Alignment.Center
+    ) {
+        BoxWithConstraints(
+            modifier = Modifier.fillMaxHeight().aspectRatio(425f / 637f)
+        ) {
+            val largura = maxWidth
+            val altura = maxHeight
+
+            Image(
+                painter = painterResource(id = R.drawable.pokedex),
+                contentDescription = null,
+                modifier = Modifier.fillMaxSize(),
+                contentScale = ContentScale.FillBounds
+            )
+
+            // O Pokémon, posicionado sobre a grama
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .offset(x = largura * TELA_ESQUERDA, y = altura * TELA_TOPO)
+                    .width(largura * TELA_LARGURA)
+                    .height(altura * TELA_ALTURA),
+                contentAlignment = Alignment.Center
+            ) {
+                when (val state = viewModel.uiState) {
+                    is PokedexUiState.Loading ->
+                        Text("Loading...", fontWeight = FontWeight.SemiBold, color = CorTexto)
+                    is PokedexUiState.NotFound ->
+                        Text("Not found!", fontWeight = FontWeight.SemiBold, color = CorTexto)
+                    is PokedexUiState.Success ->
+                        AsyncImage(
+                            model = state.pokemon.sprites.other?.showdown?.frontDefault
+                                ?: state.pokemon.sprites.frontDefault,
+                            contentDescription = state.pokemon.name,
+                            modifier = Modifier.size(largura * TELA_LARGURA * 0.55f)
+                        )
+                }
+            }
+
+            // Número e nome, na moldura logo abaixo da tela
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .offset(x = largura * MOLDURA_ESQUERDA, y = altura * (TELA_TOPO + TELA_ALTURA))
+                    .width(largura * MOLDURA_LARGURA)
+                    .height(altura * (MOLDURA_BASE - (TELA_TOPO + TELA_ALTURA))),
+                contentAlignment = Alignment.Center
+            ) {
+                val state = viewModel.uiState
+                if (state is PokedexUiState.Success) {
+                    Text(
+                        "${state.pokemon.id} - ${state.pokemon.name.replaceFirstChar { it.uppercase() }}",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = CorTexto
+                    )
+                }
+            }
+
+            // Campo de busca
+            OutlinedTextField(
+                value = termoBusca,
+                onValueChange = { termoBusca = it },
+                label = { Text("Name or Number") },
+                singleLine = true,
+                textStyle = TextStyle(fontWeight = FontWeight.SemiBold, color = CorTexto),
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                keyboardActions = KeyboardActions(onSearch = { viewModel.buscar(termoBusca) }),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedContainerColor = Color.White,
+                    unfocusedContainerColor = Color.White,
+                    focusedBorderColor = CorBorda,
+                    unfocusedBorderColor = CorBorda,
+                    focusedLabelColor = CorTexto,
+                    unfocusedLabelColor = CorTexto,
+                    cursorColor = CorTexto
+                ),
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .offset(x = largura * MOLDURA_ESQUERDA, y = altura * 0.68f)
+                    .width(largura * MOLDURA_LARGURA)
+            )
+
+            // Botões Prev / Next
+            Row(
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .offset(x = largura * MOLDURA_ESQUERDA, y = altura * 0.80f)
+                    .width(largura * MOLDURA_LARGURA),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Button(
+                    onClick = { viewModel.anterior() },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = CorBotao, contentColor = Color.White
+                    )
+                ) { Text("Prev &lt;", fontWeight = FontWeight.SemiBold) }
+
+                Button(
+                    onClick = { viewModel.proximo() },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = CorBotao, contentColor = Color.White
+                    )
+                ) { Text("Next &gt;", fontWeight = FontWeight.SemiBold) }
+            }
+        }
+    }
+}</code></pre>
+                </div>
+
+                <div class="tip-box"><strong>O que é <code>BoxWithConstraints</code>:</strong> um contêiner que informa ao código o seu próprio tamanho, através de <code>maxWidth</code> e <code>maxHeight</code>. Sem ele, não teríamos como calcular "16% da largura" — pois o app não saberia qual é a largura disponível. É o que faz o layout funcionar em telas de tamanhos diferentes.</div>
+
+                <div class="tip-box"><strong>Por que <code>aspectRatio(425f / 637f)</code>:</strong> esses são a largura e a altura reais do arquivo <code>pokedex.png</code>. Travar essa proporção impede que a ilustração seja esticada em telas mais estreitas ou largas — sem isso, a lente redonda da Pokédex aparece achatada.</div>
+
+                <div class="tip-box"><strong>Por que <code>offset</code> e não <code>padding</code>:</strong> o <code>padding</code> empurra um elemento a partir da borda do anterior, acumulando distâncias. O <code>offset</code> posiciona a partir de um ponto fixo — que é o comportamento necessário quando trabalhamos com coordenadas medidas na imagem.</div>
+
+                <div class="tip-box"><strong>Quer ajustar a posição de algum elemento?</strong> Mude os valores das constantes no topo do arquivo. Os números <code>0.68f</code> (busca) e <code>0.80f</code> (botões) não vêm da imagem — são posições livres, escolhidas visualmente. Use a aba <strong>Split</strong> do editor para ver o resultado sem precisar rodar no emulador.</div>
+            </div>
+
+            <div class="checklist">
+                <h3>Sua Pokédex está pronta se…</h3>
+                <ul>
+                    <li>Ao abrir, o app mostra o Bulbasaur (nº 1) dentro da tela da Pokédex.</li>
+                    <li>Digitar <code>pikachu</code> e tocar na lupa do teclado mostra o Pikachu.</li>
+                    <li>Digitar <code>151</code> mostra o Mew.</li>
+                    <li>Digitar algo inexistente (ex: <code>abc</code>) mostra "Not found!" sem travar o app.</li>
+                    <li>Os botões Prev e Next andam pela numeração, um Pokémon por vez.</li>
+                    <li>O Prev não passa do nº 1 (não existe Pokémon zero).</li>
+                    <li>Girar o emulador não recarrega o Pokémon do zero.</li>
+                </ul>
+            </div>
+        </section>
+
+        <section id="erros" class="acc-fix">
+            <div class="file-tag">04_troubleshooting.md</div>
+            <h2>Erros Comuns e Como Resolver</h2>
+            <p>Todos os erros abaixo aconteceram de verdade durante a montagem deste projeto. Se algo der errado, procure aqui antes de recomeçar do zero.</p>
+
+            <div class="erro-item">
+                <div class="erro-titulo">requires libraries and applications that depend on it to compile against version 36 (ou 37) or later</div>
+                <div class="erro-corpo">
+                    <p><strong>O que significa:</strong> alguma biblioteca do projeto é mais nova que o <code>compileSdk</code> configurado, e exige um SDK que você provavelmente nem tem instalado.</p>
+                    <p><strong>Solução:</strong> confira se o <code>gradle/libs.versions.toml</code> está exatamente como no Passo 0.2. A causa quase sempre é uma versão mais nova que a fixada — especialmente <code>coreKtx</code>, <code>activityCompose</code> ou <code>lifecycleRuntimeKtx</code>.</p>
+                    <p><strong>Por que não simplesmente aumentar o compileSdk:</strong> porque isso exige baixar um SDK novo (às vezes ainda em versão Preview) e pode gerar outros conflitos. Fixar bibliotecas estáveis é mais previsível — principalmente numa sala com vários computadores diferentes.</p>
+                </div>
+            </div>
+
+            <div class="erro-item">
+                <div class="erro-titulo">Configuration contains AndroidX dependencies, but the android.useAndroidX property is not enabled</div>
+                <div class="erro-corpo">
+                    <p><strong>Solução:</strong> abra o arquivo <code>gradle.properties</code> (na raiz do projeto, junto do <code>settings.gradle.kts</code>) e adicione a linha:</p>
+                    <div class="code-container" style="margin:0.6rem 0;">
+                        <div class="code-header">
+                            <span class="dots"><span class="dot d-api"></span><span class="dot d-fix"></span><span class="dot d-async"></span></span>
+                            <span class="fname">gradle.properties</span>
+                            <button class="copy-btn" onclick="copyCode(this)">Copiar</button>
+                        </div>
+<pre><code>android.useAndroidX=true</code></pre>
+                    </div>
+                    <p>Depois clique em <strong>Sync Now</strong>. Essa linha normalmente já vem no projeto; se sumiu, foi por alguma edição manual do arquivo.</p>
+                </div>
+            </div>
+
+            <div class="erro-item">
+                <div class="erro-titulo">O erro de versão volta mesmo depois de eu corrigir o libs.versions.toml</div>
+                <div class="erro-corpo">
+                    <p><strong>Causa provável:</strong> o Android Studio mostra às vezes uma notificação "Project update recommended — AGP Upgrade Assistant". Se ela for aceita, o assistente reescreve o <code>libs.versions.toml</code> e o <code>build.gradle.kts</code>, desfazendo o que você configurou.</p>
+                    <p><strong>Como identificar:</strong> abra o <code>libs.versions.toml</code> e procure por <em>entradas duplicadas</em>, como um <code>coreKtxVersion</code> além do <code>coreKtx</code>, ou uma segunda declaração de <code>core-ktx</code> no bloco <code>[libraries]</code>. Apague as duplicadas.</p>
+                    <p>Se você apagar uma entrada do catálogo, confira se o <code>build.gradle.kts (Module :app)</code> ainda a referencia (ex: uma linha <code>implementation(libs.core.ktx)</code> sobrando) — nesse caso, apague a linha também.</p>
+                    <p><strong>Prevenção:</strong> dispense a notificação do Upgrade Assistant quando ela aparecer.</p>
+                </div>
+            </div>
+
+            <div class="erro-item">
+                <div class="erro-titulo">Unresolved reference 'PokedexScreen' (ou o arquivo foi criado dentro de ui/theme)</div>
+                <div class="erro-corpo">
+                    <p><strong>Causa:</strong> o painel do Android Studio agrupa pastas que contêm apenas uma subpasta, exibindo <code>ui.theme</code> em uma linha só. Isso torna fácil criar o arquivo dentro de <code>theme</code> por engano.</p>
+                    <p><strong>Solução:</strong> arraste o <code>PokedexScreen.kt</code> da pasta errada para a pasta <code>ui</code> correta. O Android Studio perguntará se deseja atualizar o <code>package</code> — clique em <strong>Refactor</strong>. Confirme que a primeira linha do arquivo é <code>package com.seunome.pokedexnovo.ui</code>.</p>
+                </div>
+            </div>
+
+            <div class="erro-item">
+                <div class="erro-titulo">Unresolved reference 'PokedexAppTheme' (ou nome de tema parecido)</div>
+                <div class="erro-corpo">
+                    <p><strong>Causa:</strong> o tema gerado pelo template recebe o nome do projeto (um projeto chamado "PokedexAndroid" gera <code>PokedexAndroidTheme</code>). Se você copiar um código que usa outro nome, ele não existe no seu projeto.</p>
+                    <p><strong>Solução:</strong> neste guia usamos o <code>MaterialTheme</code> padrão justamente para evitar esse problema. Se preferir usar o tema do seu projeto, abra <code>ui/theme/Theme.kt</code> e confira o nome exato da função antes de usá-la.</p>
+                </div>
+            </div>
+
+            <div class="erro-item">
+                <div class="erro-titulo">O app abre, mas fica sempre em "Not found!"</div>
+                <div class="erro-corpo">
+                    <p><strong>Causa mais comum:</strong> falta a permissão de internet. Confira se a linha <code>&lt;uses-permission android:name="android.permission.INTERNET" /&gt;</code> está no <code>AndroidManifest.xml</code>, <em>acima</em> da tag <code>&lt;application&gt;</code>.</p>
+                    <p><strong>Segunda causa:</strong> o emulador está sem conexão. Abra o navegador dentro do emulador e teste qualquer site.</p>
+                    <p><strong>Dica de investigação:</strong> troque temporariamente <code>PokedexUiState.NotFound</code> por uma versão que mostre a mensagem real do erro, para saber se é falha de rede ou de conversão do JSON.</p>
+                </div>
+            </div>
+
+            <div class="erro-item">
+                <div class="erro-titulo">ERROR: JAVA_HOME is not set (ao rodar comandos no terminal)</div>
+                <div class="erro-corpo">
+                    <p><strong>Contexto:</strong> acontece ao tentar rodar <code>./gradlew</code> em um terminal que não conhece o Java embutido no Android Studio.</p>
+                    <p><strong>Solução prática:</strong> na maioria dos casos você não precisa do terminal. Se for necessário encerrar processos do Gradle travados, use o <strong>Gerenciador de Tarefas</strong> do Windows (Ctrl+Shift+Esc), finalize os processos <code>java.exe</code> e reabra o Android Studio.</p>
+                </div>
+            </div>
+
+            <div class="erro-item">
+                <div class="erro-titulo">A imagem da Pokédex aparece esticada ou achatada</div>
+                <div class="erro-corpo">
+                    <p><strong>Causa:</strong> falta travar a proporção da imagem.</p>
+                    <p><strong>Solução:</strong> confirme que o <code>BoxWithConstraints</code> do Passo 6 tem o modificador <code>.aspectRatio(425f / 637f)</code>. Sem ele, a ilustração é esticada para preencher a tela inteira.</p>
+                </div>
+            </div>
+
+            <div class="erro-item">
+                <div class="erro-titulo">O Pokémon aparece fora da grama (acima, abaixo ou de lado)</div>
+                <div class="erro-corpo">
+                    <p><strong>Solução:</strong> ajuste as constantes <code>TELA_ESQUERDA</code>, <code>TELA_TOPO</code>, <code>TELA_LARGURA</code> e <code>TELA_ALTURA</code> no topo do <code>PokedexScreen.kt</code>. Elas são porcentagens: aumentar <code>TELA_TOPO</code> desce o Pokémon, aumentar <code>TELA_ESQUERDA</code> move para a direita.</p>
+                    <p>Use a aba <strong>Split</strong> do editor para ver o efeito de cada mudança sem recompilar o app inteiro.</p>
+                </div>
+            </div>
+        </section>
+
+        <section id="atividade-cta" class="cta-section">
+            <div class="terminal-window">
+                <div class="terminal-titlebar">
+                    <span class="dot d-api"></span>
+                    <span class="dot d-fix"></span>
+                    <span class="dot d-async"></span>
+                    <span class="filename">~/proxima-missao</span>
+                </div>
+                <div class="terminal-body">
+                    <p class="term-line"><span class="term-prompt">$</span> cat proxima_missao.md</p>
+                    <p class="term-output">A Pokédex foi construída em conjunto, passo a passo. Agora é a sua vez de provar que entendeu a arquitetura — construindo um aplicativo novo, com uma API pública diferente, sozinho.</p>
+                    <p class="term-line"><span class="term-prompt">$</span></p>
+                    <a class="term-cta" href="Atividade_Pokedex_Android.pdf" download>./baixar-atividade.pdf ↵</a>
+                    <p class="cta-meta">O PDF contém a missão completa, os requisitos obrigatórios e a rubrica de correção.</p>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <footer>
+        <div class="footer-inner">
+            <img src="pokebola.png" alt="" onerror="this.style.display='none'">
+            <p>Desenvolvimento Android Moderno &copy; 2026 · MVVM + Retrofit + Jetpack Compose</p>
+        </div>
+    </footer>
+
+    <script>
+        function copyCode(btn) {
+            const pre = btn.closest('.code-container').querySelector('pre');
+            navigator.clipboard.writeText(pre.innerText).then(() => {
+                const original = btn.textContent;
+                btn.textContent = 'Copiado!';
+                setTimeout(() => { btn.textContent = original; }, 1500);
+            });
+        }
+
+        const navToggle = document.getElementById('navToggle');
+        const navLinks = document.getElementById('navLinks');
+        navToggle.addEventListener('click', () => {
+            const isOpen = navLinks.classList.toggle('open');
+            navToggle.setAttribute('aria-expanded', isOpen);
+        });
+
+        const sections = document.querySelectorAll('main > section');
+        const links = document.querySelectorAll('.step-nav-link');
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    const id = entry.target.getAttribute('id');
+                    links.forEach(link => {
+                        link.classList.toggle('active', link.getAttribute('href') === '#' + id);
+                    });
+                }
+            });
+        }, { rootMargin: '-45% 0px -50% 0px' });
+        sections.forEach(sec => observer.observe(sec));
+    </script>
+
+</body>
+</html>
